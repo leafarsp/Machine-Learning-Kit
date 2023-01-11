@@ -1,3 +1,5 @@
+import copy
+
 import numpy as np
 import pandas as pd
 from enum import Enum
@@ -19,6 +21,7 @@ class layer():
     def __init__(self, m, m_ant):
         self.w = np.ones((m, m_ant + 1))
         self.w_ant = np.zeros((m, m_ant + 1))
+        self.w_correction_ant = np.zeros((m, m_ant + 1))
         self.y = np.ones(m)
         self.d = np.ones(m)
         self.v = np.ones(m)
@@ -54,9 +57,12 @@ class MLPClassifier:
         else:
             self.hidden_layer_sizes = hidden_layer_sizes
             self.L = len(hidden_layer_sizes)+1
-        self.m = [10]
-        self.a = 1
-        self.b = 1
+        input_nodes = np.array([2])
+        output_nodes = np.array([2])
+        self.m=np.append(np.append(input_nodes,np.array(self.hidden_layer_sizes)),output_nodes)
+        self.a = np.ones(self.L)
+        self.b = np.ones(self.L)
+
         self.id = 0.
         self.uniqueId = self.__hash__()
         self.l = list()
@@ -151,12 +157,18 @@ class MLPClassifier:
     def activation_func(self, a, b, v):
         # return 1/(1+ np.exp(-a * v))
         return a * np.tanh(b * v)
+    def d_func_ativacao(self, a, b, v):
+        # return (a * np.exp(-a * v)) / ((1 + np.exp(-a * v))**2)
+        return a * b * (1 - np.tanh(b * v) ** 2)
 
     def forward_propagation(self, x):
         if len(x) != self.m[0]:
-            print(
+            raise ValueError(
                 f'Error, input vector has different size from expected. Input size= {len(x)}, Input nodes = {self.m[0]}')
+
         input = np.append(x, 1)  # acrescenta 1 relativo ao bias
+
+
         for l in range(0, self.L):
             for j in range(0, self.m[l + 1]):
                 self.l[l].v[j] = np.matmul(np.transpose(self.l[l].w[j]), input)
@@ -215,18 +227,7 @@ class MLPClassifier:
         return num_out
 
     def clone(self):
-        clone = MLPClassifier(self.L, self.m, self.a, self.b)
-        clone.set_fitness(self.get_fitness())
-        clone.set_generation(self.get_generation())
-        clone.set_id(self.get_id())
-        clone.acertividade = self.get_acertividade()
-        clone.flag_test_acertividade = self.get_flag_teste_acertividade()
-        clone.uniqueId = self.uniqueId
-        for l in range(0, self.L):
-            for j in range(0, self.m[l + 1]):
-                for w in range(0, self.m[l] + 1):
-                    clone.l[l].w[j][w] = self.l[l].w[j][w]
-        return clone
+        return copy.deepcopy(self)
 
     # # # function optimized to run on gpu
     # @jit(target_backend='cuda')
@@ -242,14 +243,163 @@ class MLPClassifier:
         d[output_value] = 1.
         return d
 
+    def backward_propagation(self, x, d, alpha, eta):
+        if len(d) != self.m[-1]:
+            raise ValueError(
+                f'Error, input vector has different size from expected. Input size= {len(x)}, Input nodes = {self.m[-1]}')
+        # self.forward_propagation(x)
+        output_d = np.append(d, 1)
+        for l in range(self.L - 1, -1, -1):
+            for j in range(0, self.m[l + 1]):
+                # print(f'l={l}, j= {j}')
+                if l == (self.L - 1):
+                    self.l[l].e[j] = output_d[j] - self.l[l].y[j]
+                else:
+                    self.l[l].e[j] = np.sum(self.l[l + 1].delta * self.get_weights_connected_ahead(j, l))
 
+                self.l[l].delta[j] = self.l[l].e[j] * self.d_func_ativacao(self.a[l], self.b[l], self.l[l].v[j])
+                if l == (0):
+                    input = np.append(x, 1)
+                else:
+                    input = np.append(self.l[l - 1].y, 1)
+
+                w_correction = alpha[l] * self.l[l].w_correction_ant[j] + eta[l] * self.l[l].delta[j] * input
+
+                self.l[l].w_correction_ant[j] = w_correction
+                # w_temp = self.l[l].w[j] + alpha[l] * self.l[l].w_ant[j] + eta[l] * self.l[l].delta[j] * input
+                # self.l[l].w_ant[j] = np.copy(self.l[l].w[j])
+                self.l[l].w[j] += w_correction
 
     def fit(self,X,y):
         if self.solver == 'BackPropagation':
-            pass
+            train_neural_network(
+                rede=self,
+                num_classes=self.m[self.L],
+                rnd_seed=self.random_state,
+                dataset=dataset,
+                test_dataset=test_dataset,
+                n_epoch=n_epoch,
+                step_plot=step_plot,
+                learning_rate=eta,
+                momentum=alpha,
+                err_min=err_min,
+                weight_limit=1.,
+                learning_rate_end=0.)
         elif self.solver == 'Genetic':
             pass
 
-    def predict(self,X):
-        pass
+    def predict(self, X):
+        return self.forward_propagation(X)
 
+def train_neural_network(rede, num_classes, rnd_seed, dataset, test_dataset, n_epoch, step_plot, learning_rate,
+                         momentum, err_min, weight_limit, learning_rate_end=0.):
+    start_time = dt.datetime.now()
+
+
+    print(f'Start time: {start_time.year:04d}-{start_time.month:02d}-{start_time.day:02d}'
+          f'--{start_time.hour:02d}:{start_time.minute:02d}:{start_time.second:02d}')
+    rnd_seed = rnd_seed
+    # Base de dados de treinamento
+    dataset = dataset
+    test_dataset = test_dataset
+
+    # cria rede neural
+    # rede = rede
+
+    n_inst = len(dataset.index)
+    # parâmetros de treinamento da rede
+    n_epoch = n_epoch
+    n_inst = len(dataset.index)
+    N = n_inst * n_epoch
+    step_plot = step_plot
+
+    n_cont = 0
+
+    eta = np.ones((rede.L, N))
+    for l in range(0, rede.L):
+        eta[l] = list(np.linspace(learning_rate[l], learning_rate_end, N))
+
+    # for l in range(0,a1.L):
+    #   plt.plot(eta[l])
+    #   pass
+    eta = np.transpose(eta)
+    # eta[:, [1, 0]]
+
+    # plt.figure()
+
+    alpha = np.ones((rede.L, N))
+    for l in range(0, rede.L):
+        alpha[l] = list(np.linspace(momentum[l], 0., N))
+    # alpha[0] *= 0.000000  # camada de entrada
+    # alpha[1] *= 0.000000  # camada oculta 1
+    # alpha[2] *= 0.000000  # camada de saída
+    # alpha[3] *= 0.000000  # camada de saída
+    alpha = np.transpose(alpha)
+
+    # Inicializa os pesos com valores aleatórios e o bias como zero
+    if rede.weights_initialized == False:
+        rede.initialize_weights_random(random_seed=rnd_seed, weight_limit=weight_limit)
+
+    # Vetor de pesos para plotar gráficos de evolução deles.
+    a1plt = list()
+    acert = list()
+
+    Eav = np.zeros(n_epoch)
+    # início do treinamento
+    start_time_epoch = dt.datetime.now()
+    for ne in range(0, n_epoch):
+        dataset_shufle = shufle_dataset(dataset=dataset, rnd_seed=rnd_seed)
+
+        rnd_seed += 1
+        e_epoch = 0
+
+        for ni in range(0, n_inst):
+            n = ni + ne * (n_inst)
+            if n >= (N - 1):
+                break
+            x = list(dataset_shufle.iloc[ni, 1:(rede.m[0] + 1)])
+            output_value = int(dataset_shufle.iloc[ni, 0])
+            # d = [dataset_shufle.iloc[ni, 0]]
+            d = rede.output_layer_activation(output_value=output_value, num_classes=num_classes)
+            rede.forward_propagation(x=x)
+            rede.backward_propagation(x=x, d=d, alpha=alpha[n], eta=eta[n])
+
+            if n >= step_plot:
+                if n % step_plot == 0:
+                    rede.flag_test_acertividade = False
+                    teste_acertividade(test_dataset, int(num_classes), rede)
+                    acert.append(rede.get_acertividade())
+                    elapsed_time = dt.datetime.now() - start_time_epoch
+                    start_time_epoch = dt.datetime.now()
+                    estimated_time_end = start_time_epoch + elapsed_time * (N // step_plot - n_cont)
+                    n_cont += 1
+                    print(f'Instância {n}/{N}, Época {ne}/{n_epoch}, Erro médio: {Eav[ne-1]:.7f}'
+                          f' Acert.: {acert[-1]:.4f}%, eta[L][n]: {eta[n][rede.L - 1]:.4f}, dt: {elapsed_time.seconds}s'
+                          f' t_end: {estimated_time_end.year:04d}-{estimated_time_end.month:02d}-{estimated_time_end.day:02d}'
+                          f'--{estimated_time_end.hour:02d}:{estimated_time_end.minute:02d}:{estimated_time_end.second:02d}')
+                    temp_rede = rede_neural(rede.L, rede.m, rede.a, rede.b)
+                    for l in range(0, rede.L):
+                        temp_rede.l[l].w = np.copy(rede.l[l].w)
+                    a1plt.append(temp_rede)
+                    # a1.save_neural_network('backup_neural_network.xlsx')
+
+            e_epoch += rede.get_sum_eL()
+        Eav[ne] = 1 / (n_inst) * e_epoch
+
+        # print(f'Erro Época {ne}/{n_epoch}: {Eav[ne]:.5f}')
+        # A linha abaixo calcula a média como escrito no livro, mas
+        # não tem muito sentido calcular desse jeito, o erro
+        # fica menor se o número de épocas aumenta.
+        # Se eu pegar uma rede que foi treinada desse jeito e chegou
+        # num erro 0,0001 por exemplo, se eu testá-la novamente
+        # com apenas uma época, o erro vai ser maior.
+        # Pra mim esse valor deveria ser fíxo, independente do
+        # número de épocas. Dessa forma, eu obteria o mesmo erro,
+        # seja após 1000 épocas ou após apenas uma.
+        # Eav[ne] += Eav[ne] + 1/(2*N) * e_epoch
+        if (Eav[ne] < err_min):
+            print(f'Erro mínimo: {Eav[ne]}')
+            break
+    # teste da rede neural
+
+    return rede, a1plt, Eav, n, acert

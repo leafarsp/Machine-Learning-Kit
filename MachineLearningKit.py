@@ -1,5 +1,5 @@
 import copy
-
+import datetime as dt
 import numpy as np
 import pandas as pd
 from enum import Enum
@@ -40,7 +40,9 @@ class MLPClassifier:
                  max_iter=200,
                  shuffle=True,
                  random_state=1,
-                 n_individuals=10
+                 momentum=0,
+                 n_individuals=10,
+                 weight_limit=1
                  ):
 
         self.activation=activation
@@ -291,33 +293,34 @@ class MLPClassifier:
     def predict(self, X):
         return self.forward_propagation(X)
 
-def train_neural_network(rede, num_classes, rnd_seed, dataset, test_dataset, n_epoch, step_plot, learning_rate,
-                         momentum, err_min, weight_limit, learning_rate_end=0.):
-    start_time = dt.datetime.now()
+def train_neural_network(rede : MLPClassifier, X,y,):
 
+    start_time = dt.datetime.now()
+    num_classes = rede.m(rede.L)
+    rnd_seed = rede.random_state
 
     print(f'Start time: {start_time.year:04d}-{start_time.month:02d}-{start_time.day:02d}'
           f'--{start_time.hour:02d}:{start_time.minute:02d}:{start_time.second:02d}')
-    rnd_seed = rnd_seed
+
     # Base de dados de treinamento
-    dataset = dataset
-    test_dataset = test_dataset
+
 
     # cria rede neural
     # rede = rede
 
-    n_inst = len(dataset.index)
+    n_inst = np.shape(X)[0]
+
     # parâmetros de treinamento da rede
-    n_epoch = n_epoch
-    n_inst = len(dataset.index)
+    n_epoch = rede.n_epoch
+
     N = n_inst * n_epoch
-    step_plot = step_plot
+    step_plot = int(N / (n_epoch * 1))
 
     n_cont = 0
 
     eta = np.ones((rede.L, N))
     for l in range(0, rede.L):
-        eta[l] = list(np.linspace(learning_rate[l], learning_rate_end, N))
+        eta[l] = list(np.linspace(rede.learning_rate_init, rede.learning_rate_init, N))
 
     # for l in range(0,a1.L):
     #   plt.plot(eta[l])
@@ -329,7 +332,7 @@ def train_neural_network(rede, num_classes, rnd_seed, dataset, test_dataset, n_e
 
     alpha = np.ones((rede.L, N))
     for l in range(0, rede.L):
-        alpha[l] = list(np.linspace(momentum[l], 0., N))
+        alpha[l] = list(np.linspace(rede.momentum, 0., N))
     # alpha[0] *= 0.000000  # camada de entrada
     # alpha[1] *= 0.000000  # camada oculta 1
     # alpha[2] *= 0.000000  # camada de saída
@@ -338,7 +341,7 @@ def train_neural_network(rede, num_classes, rnd_seed, dataset, test_dataset, n_e
 
     # Inicializa os pesos com valores aleatórios e o bias como zero
     if rede.weights_initialized == False:
-        rede.initialize_weights_random(random_seed=rnd_seed, weight_limit=weight_limit)
+        rede.initialize_weights_random(random_seed=rnd_seed, weight_limit=rede.weight_limit)
 
     # Vetor de pesos para plotar gráficos de evolução deles.
     a1plt = list()

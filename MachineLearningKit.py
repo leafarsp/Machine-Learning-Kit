@@ -42,7 +42,8 @@ class MLPClassifier:
                  random_state=1,
                  momentum=0,
                  n_individuals=10,
-                 weight_limit=1
+                 weight_limit=1,
+                 batch_size = 'auto'
                  ):
 
         self.activation=activation
@@ -293,7 +294,16 @@ class MLPClassifier:
     def predict(self, X):
         return self.forward_propagation(X)
 
-def train_neural_network(rede : MLPClassifier, X,y,):
+def shufle_dataset(X,y):
+    n_inst = np.shape(y)[0]
+    in_nodes = np.shape(X)[1]
+    out_nodes = np.shape(y)[1]
+    dataset = np.c_[y,X]
+    np.random.shuffle(dataset)
+    y=dataset[:,0:out_nodes]
+    X=dataset[:,out_nodes:]
+    return X,y
+def train_neural_network(rede : MLPClassifier, X:list,y:list):
 
     start_time = dt.datetime.now()
     num_classes = rede.m(rede.L)
@@ -311,7 +321,7 @@ def train_neural_network(rede : MLPClassifier, X,y,):
     n_inst = np.shape(X)[0]
 
     # parâmetros de treinamento da rede
-    n_epoch = rede.n_epoch
+    n_epoch = rede.max_iter
 
     N = n_inst * n_epoch
     step_plot = int(N / (n_epoch * 1))
@@ -341,7 +351,7 @@ def train_neural_network(rede : MLPClassifier, X,y,):
 
     # Inicializa os pesos com valores aleatórios e o bias como zero
     if rede.weights_initialized == False:
-        rede.initialize_weights_random(random_seed=rnd_seed, weight_limit=rede.weight_limit)
+        rede.initialize_weights_random(random_seed=rede.random_state, weight_limit=rede.weight_limit)
 
     # Vetor de pesos para plotar gráficos de evolução deles.
     a1plt = list()
@@ -351,7 +361,7 @@ def train_neural_network(rede : MLPClassifier, X,y,):
     # início do treinamento
     start_time_epoch = dt.datetime.now()
     for ne in range(0, n_epoch):
-        dataset_shufle = shufle_dataset(dataset=dataset, rnd_seed=rnd_seed)
+        X,y = shufle_dataset(dataset=dataset, rnd_seed=rede.random_state)
 
         rnd_seed += 1
         e_epoch = 0

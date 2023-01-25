@@ -361,7 +361,7 @@ def train_neural_network(rede : MLPClassifier, X:list,y:list):
     # início do treinamento
     start_time_epoch = dt.datetime.now()
     for ne in range(0, n_epoch):
-        X,y = shufle_dataset(dataset=dataset, rnd_seed=rede.random_state)
+        X_l,y_l = shufle_dataset(X,y)
 
         rnd_seed += 1
         e_epoch = 0
@@ -370,12 +370,9 @@ def train_neural_network(rede : MLPClassifier, X:list,y:list):
             n = ni + ne * (n_inst)
             if n >= (N - 1):
                 break
-            x = list(dataset_shufle.iloc[ni, 1:(rede.m[0] + 1)])
-            output_value = int(dataset_shufle.iloc[ni, 0])
-            # d = [dataset_shufle.iloc[ni, 0]]
-            d = rede.output_layer_activation(output_value=output_value, num_classes=num_classes)
-            rede.forward_propagation(x=x)
-            rede.backward_propagation(x=x, d=d, alpha=alpha[n], eta=eta[n])
+
+            rede.forward_propagation(x=X_l)
+            rede.backward_propagation(x=X_l, d=y_l, alpha=alpha[n], eta=eta[n])
 
             if n >= step_plot:
                 if n % step_plot == 0:
@@ -416,3 +413,30 @@ def train_neural_network(rede : MLPClassifier, X:list,y:list):
     # teste da rede neural
 
     return rede, a1plt, Eav, n, acert
+
+
+def teste_acertividade(test_dataset, num_classes, neural_network, print_result=False):
+    cont_acert = 0
+    wrong_text = ' - wrong'
+    if neural_network.get_flag_teste_acertividade() == False:
+        for i in range(0, len(test_dataset)):
+
+            num_real = test_dataset.iloc[i, 0]
+            x = list(test_dataset.iloc[i, 1:])
+
+            y = neural_network.forward_propagation(x)
+
+            num_rede = neural_network.get_output_class()
+
+            if num_rede != np.nan:
+
+                if (num_real == num_rede):
+                    cont_acert += 1
+                    wrong_text = ""
+
+            if print_result:
+                print(f'Núm. real: {num_real}, núm rede: {num_rede}{wrong_text}')
+            wrong_text = ' - wrong'
+        result = 100 * cont_acert / len(test_dataset)
+        # print(f'Acertividade: {result}')
+        neural_network.set_acertividade(result)

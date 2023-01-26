@@ -33,9 +33,9 @@ class MLPClassifier:
 
     def __init__(self,
                  hidden_layer_sizes=((10)),
-                 activation:activation_function_name=activation_function_name.TANH,
+                 activation: activation_function_name = activation_function_name.TANH,
                  learning_rate='constant',
-                 solver:solver=solver.BACKPROPAGATION,
+                 solver=solver.BACKPROPAGATION,
                  learning_rate_init=0.001,
                  max_iter=200,
                  shuffle=True,
@@ -43,7 +43,8 @@ class MLPClassifier:
                  momentum=0,
                  n_individuals=10,
                  weight_limit=1,
-                 batch_size = 'auto'
+                 batch_size='auto',
+                 tol=0.0001
                  ):
 
         self.activation=activation
@@ -52,17 +53,20 @@ class MLPClassifier:
         self.max_iter = max_iter
         self.shuffle = shuffle
         self.random_state = random_state
-        self.n_individuals = 10
+        self.n_individuals = n_individuals
+        self.momentum = momentum
+        self.tol=tol
+        self.weight_limit=weight_limit
+        self.batch_size=batch_size
+        self.solver=solver
 
         if type(hidden_layer_sizes) == int:
-            self.hidden_layer_sizes=(hidden_layer_sizes,)
+            self.hidden_layer_sizes = (hidden_layer_sizes,)
             self.L = 2
         else:
             self.hidden_layer_sizes = hidden_layer_sizes
             self.L = len(hidden_layer_sizes)+1
-        input_nodes = np.array([2])
-        output_nodes = np.array([2])
-        self.m=np.append(np.append(input_nodes,np.array(self.hidden_layer_sizes)),output_nodes)
+
         self.a = np.ones(self.L)
         self.b = np.ones(self.L)
 
@@ -75,10 +79,12 @@ class MLPClassifier:
         self.generation = 0
         self.class_distinction_rate = 0.
         self.flag_test_acertividade = False
-        self.coefs_=None
-        self.intercepts_=None
+        self.coefs_= None
+        self.intercepts_= None
+        self.layers_initialized = False
 
     def initialize_layers(self, n_input_nodes, n_classes):
+
         input_nodes = np.array((n_input_nodes))
         output_classes = np.array((n_classes))
         m = np.append(input_nodes, self.hidden_layer_sizes)
@@ -87,6 +93,7 @@ class MLPClassifier:
 
         for i in range(0, self.L):
             self.l.append(layer(m[i + 1], m[i]))
+        layers_initialized = True
 
     def get_weights_connected_ahead(self, j, l):
         wlLkj = np.zeros(self.m[l + 2])
@@ -99,7 +106,7 @@ class MLPClassifier:
             np.random.seed(random_seed)
         # weight_limit = 10.
         for l in range(0, self.L):
-            self.l[l].w = np.random.rand(self.m[l + 1], self.m[l] + 1) * 2. * (weight_limit) - weight_limit
+            self.l[l].w = np.random.rand(self.m[l + 1], self.m[l] + 1) * 2. * weight_limit - weight_limit
             # Inicializa o Bias como zero
             for j in range(0, self.m[l + 1]):
                 self.l[l].w[j][-1] = 0
@@ -215,19 +222,24 @@ class MLPClassifier:
     def set_id(self, id):
         self.id = id
 
-    def get_output_class(self, threshold=0.8):
+    def get_output_class(self, y=None, threshold=0.8):
         num_out = np.nan
         cont_neuronio_ativo = 0
-        for j in range(0, self.m[self.L]):
-        # for j in range(self.m[self.L]-1, -1, -1):
-            if (self.l[self.L - 1].y[j] > (1 * threshold)):
-                # num_out = j
+
+        if y is not None:
+            y_l = y
+        else:
+            y_l = self.l[self.L - 1].y
+
+        for j in range(0, len(y_l)):
+            if y_l[j] > (1 * threshold):
                 num_out = j
                 cont_neuronio_ativo += 1
-            if (cont_neuronio_ativo > 1):
+            if cont_neuronio_ativo > 1:
                 num_out = np.nan
                 break
         return num_out
+
 
     def clone(self):
         return copy.deepcopy(self)
@@ -273,23 +285,15 @@ class MLPClassifier:
                 # self.l[l].w_ant[j] = np.copy(self.l[l].w[j])
                 self.l[l].w[j] += w_correction
 
-    def fit(self,X,y):
-        if self.solver == 'BackPropagation':
-            train_neural_network(
-                rede=self,
-                num_classes=self.m[self.L],
-                rnd_seed=self.random_state,
-                dataset=dataset,
-                test_dataset=test_dataset,
-                n_epoch=n_epoch,
-                step_plot=step_plot,
-                learning_rate=eta,
-                momentum=alpha,
-                err_min=err_min,
-                weight_limit=1.,
-                learning_rate_end=0.)
-        elif self.solver == 'Genetic':
+    def fit(self, X, y):
+        Eav= None
+        if not self.weights_initialized:
+            self.initialize_layers(len(X[0]),len(y[0]))
+        if self.solver == solver.BACKPROPAGATION:
+            Eav = train_neural_network(rede=self, X=X, y=y)
+        elif self.solver == solver.GENETIC_ALGORITHM:
             pass
+        return Eav
 
     def predict(self, X):
         return self.forward_propagation(X)
@@ -303,65 +307,38 @@ def shufle_dataset(X,y):
     y=dataset[:,0:out_nodes]
     X=dataset[:,out_nodes:]
     return X,y
-def train_neural_network(rede : MLPClassifier, X:list,y:list):
 
-    start_time = dt.datetime.now()
-    num_classes = rede.m(rede.L)
+
+def train_neural_network(rede: MLPClassifier, X: list, y: list):
+
     rnd_seed = rede.random_state
-
-    print(f'Start time: {start_time.year:04d}-{start_time.month:02d}-{start_time.day:02d}'
-          f'--{start_time.hour:02d}:{start_time.minute:02d}:{start_time.second:02d}')
-
-    # Base de dados de treinamento
-
-
-    # cria rede neural
-    # rede = rede
 
     n_inst = np.shape(X)[0]
 
-    # parâmetros de treinamento da rede
     n_epoch = rede.max_iter
 
     N = n_inst * n_epoch
-    step_plot = int(N / (n_epoch * 1))
-
-    n_cont = 0
 
     eta = np.ones((rede.L, N))
     for l in range(0, rede.L):
         eta[l] = list(np.linspace(rede.learning_rate_init, rede.learning_rate_init, N))
 
-    # for l in range(0,a1.L):
-    #   plt.plot(eta[l])
-    #   pass
     eta = np.transpose(eta)
-    # eta[:, [1, 0]]
-
-    # plt.figure()
 
     alpha = np.ones((rede.L, N))
     for l in range(0, rede.L):
         alpha[l] = list(np.linspace(rede.momentum, 0., N))
-    # alpha[0] *= 0.000000  # camada de entrada
-    # alpha[1] *= 0.000000  # camada oculta 1
-    # alpha[2] *= 0.000000  # camada de saída
-    # alpha[3] *= 0.000000  # camada de saída
+
     alpha = np.transpose(alpha)
 
     # Inicializa os pesos com valores aleatórios e o bias como zero
-    if rede.weights_initialized == False:
+    if not rede.weights_initialized:
         rede.initialize_weights_random(random_seed=rede.random_state, weight_limit=rede.weight_limit)
-
-    # Vetor de pesos para plotar gráficos de evolução deles.
-    a1plt = list()
-    acert = list()
 
     Eav = np.zeros(n_epoch)
     # início do treinamento
-    start_time_epoch = dt.datetime.now()
     for ne in range(0, n_epoch):
-        X_l,y_l = shufle_dataset(X,y)
+        X_l, y_l = shufle_dataset(X, y)
 
         rnd_seed += 1
         e_epoch = 0
@@ -370,62 +347,26 @@ def train_neural_network(rede : MLPClassifier, X:list,y:list):
             n = ni + ne * (n_inst)
             if n >= (N - 1):
                 break
-
             rede.forward_propagation(x=X_l)
             rede.backward_propagation(x=X_l, d=y_l, alpha=alpha[n], eta=eta[n])
-
-            if n >= step_plot:
-                if n % step_plot == 0:
-                    rede.flag_test_acertividade = False
-                    teste_acertividade(test_dataset, int(num_classes), rede)
-                    acert.append(rede.get_acertividade())
-                    elapsed_time = dt.datetime.now() - start_time_epoch
-                    start_time_epoch = dt.datetime.now()
-                    estimated_time_end = start_time_epoch + elapsed_time * (N // step_plot - n_cont)
-                    n_cont += 1
-                    print(f'Instância {n}/{N}, Época {ne}/{n_epoch}, Erro médio: {Eav[ne-1]:.7f}'
-                          f' Acert.: {acert[-1]:.4f}%, eta[L][n]: {eta[n][rede.L - 1]:.4f}, dt: {elapsed_time.seconds}s'
-                          f' t_end: {estimated_time_end.year:04d}-{estimated_time_end.month:02d}-{estimated_time_end.day:02d}'
-                          f'--{estimated_time_end.hour:02d}:{estimated_time_end.minute:02d}:{estimated_time_end.second:02d}')
-                    temp_rede = rede_neural(rede.L, rede.m, rede.a, rede.b)
-                    for l in range(0, rede.L):
-                        temp_rede.l[l].w = np.copy(rede.l[l].w)
-                    a1plt.append(temp_rede)
-                    # a1.save_neural_network('backup_neural_network.xlsx')
-
             e_epoch += rede.get_sum_eL()
         Eav[ne] = 1 / (n_inst) * e_epoch
 
-        # print(f'Erro Época {ne}/{n_epoch}: {Eav[ne]:.5f}')
-        # A linha abaixo calcula a média como escrito no livro, mas
-        # não tem muito sentido calcular desse jeito, o erro
-        # fica menor se o número de épocas aumenta.
-        # Se eu pegar uma rede que foi treinada desse jeito e chegou
-        # num erro 0,0001 por exemplo, se eu testá-la novamente
-        # com apenas uma época, o erro vai ser maior.
-        # Pra mim esse valor deveria ser fíxo, independente do
-        # número de épocas. Dessa forma, eu obteria o mesmo erro,
-        # seja após 1000 épocas ou após apenas uma.
-        # Eav[ne] += Eav[ne] + 1/(2*N) * e_epoch
-        if (Eav[ne] < err_min):
-            print(f'Erro mínimo: {Eav[ne]}')
+        if Eav[ne] < rede.tol:
             break
-    # teste da rede neural
 
-    return rede, a1plt, Eav, n, acert
+    return Eav
 
 
-def teste_acertividade(test_dataset, num_classes, neural_network, print_result=False):
+def teste_acertividade(X: list, y: list, neural_network: MLPClassifier, print_result=False):
     cont_acert = 0
     wrong_text = ' - wrong'
+    n_inst = np.shape(X)[0]
     if neural_network.get_flag_teste_acertividade() == False:
-        for i in range(0, len(test_dataset)):
+        for i in range(0, n_inst):
 
-            num_real = test_dataset.iloc[i, 0]
-            x = list(test_dataset.iloc[i, 1:])
-
-            y = neural_network.forward_propagation(x)
-
+            num_real = neural_network.get_output_class(y[i])
+            neural_network.forward_propagation(X[i])
             num_rede = neural_network.get_output_class()
 
             if num_rede != np.nan:
@@ -437,6 +378,5 @@ def teste_acertividade(test_dataset, num_classes, neural_network, print_result=F
             if print_result:
                 print(f'Núm. real: {num_real}, núm rede: {num_rede}{wrong_text}')
             wrong_text = ' - wrong'
-        result = 100 * cont_acert / len(test_dataset)
-        # print(f'Acertividade: {result}')
+        result = 100 * cont_acert / n_inst
         neural_network.set_acertividade(result)

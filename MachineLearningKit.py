@@ -3,6 +3,7 @@ import datetime as dt
 import numpy as np
 import pandas as pd
 from enum import Enum
+import matplotlib.pyplot as plt
 
 class activation_function_name(Enum):
     TANH=1
@@ -44,7 +45,9 @@ class MLPClassifier:
                  n_individuals=10,
                  weight_limit=1,
                  batch_size='auto',
-                 tol=0.0001
+                 tol=0.0001,
+                 power_t=0.5,
+                 n_iter_no_change = 10
                  ):
 
         self.activation=activation
@@ -59,6 +62,8 @@ class MLPClassifier:
         self.weight_limit=weight_limit
         self.batch_size=batch_size
         self.solver=solver
+        self.power_t=power_t
+        self.n_iter_no_change=n_iter_no_change
 
         if type(hidden_layer_sizes) == int:
             self.hidden_layer_sizes = (hidden_layer_sizes,)
@@ -296,7 +301,7 @@ class MLPClassifier:
         return Eav
 
     def predict(self, X):
-        return self.forward_propagation(X)
+        return self.forward_propagation(X[0])
 
 def shufle_dataset(X,y):
     n_inst = np.shape(y)[0]
@@ -314,21 +319,40 @@ def train_neural_network(rede: MLPClassifier, X: list, y: list):
     rnd_seed = rede.random_state
 
     n_inst = np.shape(X)[0]
-
+    cnt_iter=0
     n_epoch = rede.max_iter
 
     N = n_inst * n_epoch
 
     eta = np.ones((rede.L, N))
-    for l in range(0, rede.L):
-        eta[l] = list(np.linspace(rede.learning_rate_init, rede.learning_rate_init, N))
+    if rede.learning_rate == 'constant':
+        for l in range(0, rede.L):
+            eta[l] = list(np.linspace(rede.learning_rate_init, rede.learning_rate_init, N))
+
+        alpha = np.ones((rede.L, N))
+        for l in range(0, rede.L):
+            alpha[l] = list(np.linspace(rede.momentum, 0., N))
+
+    elif rede.learning_rate == 'invscaling':
+        t = np.linspace(rede.learning_rate_init,N,N)
+        for l in range(0, rede.L):
+            eta[l] = rede.learning_rate_init / pow(t, rede.power_t)
+
+        t = np.linspace(rede.momentum, N, N)
+        alpha = np.ones((rede.L, N))
+        for l in range(0, rede.L):
+            alpha[l] = rede.momentum / pow(t, rede.power_t)
+    else:
+        for l in range(0, rede.L):
+            eta[l] = list(np.linspace(rede.learning_rate_init, 0, N))
+
+        alpha = np.ones((rede.L, N))
+        for l in range(0, rede.L):
+            alpha[l] = list(np.linspace(rede.momentum, 0., N))
+
+
 
     eta = np.transpose(eta)
-
-    alpha = np.ones((rede.L, N))
-    for l in range(0, rede.L):
-        alpha[l] = list(np.linspace(rede.momentum, 0., N))
-
     alpha = np.transpose(alpha)
 
     # Inicializa os pesos com valores aleatórios e o bias como zero
@@ -350,24 +374,28 @@ def train_neural_network(rede: MLPClassifier, X: list, y: list):
             rede.forward_propagation(x=X_l[ni])
             rede.backward_propagation(x=X_l[ni], d=y_l[ni], alpha=alpha[n], eta=eta[n])
             e_epoch += rede.get_sum_eL()
+            cnt_iter += 1
         Eav[ne] = 1 / (n_inst) * e_epoch
-
+        # if cnt_iter > rede.n_iter_no_change:
+        #     for i in range(cnt_iter - rede.n_iter_no_change, rede.n_iter_no_change):
+        #
+        #
         if Eav[ne] < rede.tol:
             break
 
-    return Eav
+    return Eav, ne
 
 
-def teste_acertividade(X: list, y: list, neural_network: MLPClassifier, print_result=False):
+def teste_acertividade(X: list, y: list, rede: MLPClassifier, print_result=False):
     cont_acert = 0
     wrong_text = ' - wrong'
     n_inst = np.shape(X)[0]
-    if neural_network.get_flag_teste_acertividade() == False:
+    if rede.get_flag_teste_acertividade() == False:
         for i in range(0, n_inst):
 
-            num_real = neural_network.get_output_class(y[i])
-            neural_network.forward_propagation(X[i])
-            num_rede = neural_network.get_output_class()
+            num_real = rede.get_output_class(y[i])
+            y_l = rede.forward_propagation(X[i])
+            num_rede = rede.get_output_class()
 
             if num_rede != np.nan:
 
@@ -376,7 +404,7 @@ def teste_acertividade(X: list, y: list, neural_network: MLPClassifier, print_re
                     wrong_text = ""
 
             if print_result:
-                print(f'Núm. real: {num_real}, núm rede: {num_rede}{wrong_text}')
+                print(f'Núm. real: {num_real}, núm rede: {num_rede}{wrong_text}, neurônios: {y_l}')
             wrong_text = ' - wrong'
         result = 100 * cont_acert / n_inst
-        neural_network.set_acertividade(result)
+        rede.set_acertividade(result)

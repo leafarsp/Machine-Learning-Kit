@@ -347,8 +347,8 @@ def train_neural_network(rede: MLPClassifier, X: list, y: list):
             n = ni + ne * (n_inst)
             if n >= (N - 1):
                 break
-            rede.forward_propagation(x=X_l)
-            rede.backward_propagation(x=X_l, d=y_l, alpha=alpha[n], eta=eta[n])
+            rede.forward_propagation(x=X_l[ni])
+            rede.backward_propagation(x=X_l[ni], d=y_l[ni], alpha=alpha[n], eta=eta[n])
             e_epoch += rede.get_sum_eL()
         Eav[ne] = 1 / (n_inst) * e_epoch
 

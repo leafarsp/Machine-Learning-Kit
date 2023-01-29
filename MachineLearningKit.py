@@ -380,6 +380,7 @@ def train_neural_network(rede: MLPClassifier, X: list, y: list):
         #     for i in range(cnt_iter - rede.n_iter_no_change, rede.n_iter_no_change):
         #
         #
+        print(f'Epoch: {ne}/{n_epoch}, error: {Eav[ne]}, target error:{rede.tol}')
         if Eav[ne] < rede.tol:
             break
 
@@ -404,7 +405,28 @@ def teste_acertividade(X: list, y: list, rede: MLPClassifier, print_result=False
                     wrong_text = ""
 
             if print_result:
-                print(f'Núm. real: {num_real}, núm rede: {num_rede}{wrong_text}, neurônios: {y_l}')
+                print(f'Núm. real: {num_real}, núm rede: {num_rede}{wrong_text}') #, neurônios: {y_l}')
             wrong_text = ' - wrong'
         result = 100 * cont_acert / n_inst
         rede.set_acertividade(result)
+
+
+def get_output_class(y, threshold=0.8):
+    num_out = np.nan
+    cont_neuronio_ativo = 0
+    y_l = y
+
+    for j in range(0, len(y_l)):
+        if y_l[j] > (1 * threshold):
+            num_out = j
+            cont_neuronio_ativo += 1
+        if cont_neuronio_ativo > 1:
+            num_out = np.nan
+            break
+    return num_out
+
+def output_layer_activation(output_value, num_classes):
+    d = np.ones(num_classes, dtype=np.float64) * -1.
+    # num = dataset_shufle.iloc[ni, 0]
+    d[output_value] = 1.
+    return d

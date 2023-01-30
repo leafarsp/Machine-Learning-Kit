@@ -360,6 +360,7 @@ def train_neural_network(rede: MLPClassifier, X: list, y: list):
         rede.initialize_weights_random(random_seed=rede.random_state, weight_limit=rede.weight_limit)
 
     Eav = np.zeros(n_epoch)
+    E_inst = np.zeros(N)
     # início do treinamento
     for ne in range(0, n_epoch):
         X_l, y_l = shufle_dataset(X, y)
@@ -372,39 +373,189 @@ def train_neural_network(rede: MLPClassifier, X: list, y: list):
             if n >= (N - 1):
                 break
             rede.forward_propagation(x=X_l[ni])
-            rede.backward_propagation(x=X_l[ni], d=y_l[ni], alpha=alpha[n], eta=eta[n])
+            rede.backward_propagation(x=X_l[ni], d=y_l[ni],
+                                      alpha=alpha[n], eta=eta[n])
             e_epoch += rede.get_sum_eL()
+            E_inst[cnt_iter] = rede.get_sum_eL()
             cnt_iter += 1
+
         Eav[ne] = 1 / (n_inst) * e_epoch
-        # if cnt_iter > rede.n_iter_no_change:
-        #     for i in range(cnt_iter - rede.n_iter_no_change, rede.n_iter_no_change):
+        # Faz a avaliação dos últims treinamento depois de x instâncias
+
         #
         #
-        if Eav[ne] < rede.tol:
+        print(f'Epoch: {ne}/{n_epoch}, loss: {Eav[ne]}')
+        stop_training = eval_stop_training(cnt_iter=ne,
+                                           n_iter_no_change=rede.n_iter_no_change,
+                                           err=Eav, tol=rede.tol)
+        if stop_training:
+            print(f'Training loss did not improve more than '
+                  f'tol={rede.tol:.8f} for {rede.n_iter_no_change} '
+                  f'consecutive epochs. Stopping.')
             break
+        # if Eav[ne] < rede.tol:
+        #     break
 
     return Eav, ne
 
+def eval_stop_training(cnt_iter, n_iter_no_change, err, tol):
+    result = False
+    cnt_err_no_change = 0
+    err_chg = 0
 
-def teste_acertividade(X: list, y: list, rede: MLPClassifier, print_result=False):
+    if cnt_iter > n_iter_no_change:
+        # avalia as últimas instancias
+        for i in range(cnt_iter - n_iter_no_change,
+                       cnt_iter):
+            err_chg = abs(err[i]-err[i-1])
+            if err_chg < tol:
+                cnt_err_no_change += 1
+            else:
+                cnt_err_no_change = 0
+
+            if cnt_err_no_change >= n_iter_no_change:
+                result = True
+
+    # if result:
+    #     print(f'result = {result}, cnt_iter={cnt_iter}'
+    #           f' n_iter_no_change={n_iter_no_change}')
+    #     print(err[cnt_iter - n_iter_no_change:cnt_iter])
+    return result
+
+def teste_acertividade(X: list, y: list, rede: MLPClassifier,
+                       print_result=False, save_result=False,
+                       filename='training_results.xlsx'):
     cont_acert = 0
     wrong_text = ' - wrong'
     n_inst = np.shape(X)[0]
+    columns = ['Instance','Real class', 'Predicted class', 'Result']
+
+    columns += list(np.arange(rede.m[-1]))
+    df = pd.DataFrame(columns = columns)
     if rede.get_flag_teste_acertividade() == False:
         for i in range(0, n_inst):
 
             num_real = rede.get_output_class(y[i])
             y_l = rede.forward_propagation(X[i])
             num_rede = rede.get_output_class()
-
+            comparision_result = False
             if num_rede != np.nan:
 
                 if (num_real == num_rede):
                     cont_acert += 1
+                    comparision_result = True
                     wrong_text = ""
 
+            list_row = [i,num_real, num_rede, comparision_result]
+
+            list_row = list(list_row) + list(y_l)
+
+
+            df.loc[len(df)] = list_row
+
             if print_result:
-                print(f'Núm. real: {num_real}, núm rede: {num_rede}{wrong_text}, neurônios: {y_l}')
+                print(f'Núm. real: {num_real}, núm rede: {num_rede}{wrong_text}') #, neurônios: {y_l}')
             wrong_text = ' - wrong'
         result = 100 * cont_acert / n_inst
         rede.set_acertividade(result)
+
+        list_row = ['', '', 'Accuracy', f'{result:.2f}%']
+        list_row += ['']*len(y[0])
+        df.loc[len(df)] = list_row
+        if save_result==True:
+            df.to_excel(filename,sheet_name='Results')
+
+
+
+def get_output_class(y, threshold=0.8):
+    num_out = np.nan
+    cont_neuronio_ativo = 0
+    y_l = y
+
+    for j in range(0, len(y_l)):
+        if y_l[j] > (1 * threshold):
+            num_out = j
+            cont_neuronio_ativo += 1
+        if cont_neuronio_ativo > 1:
+            num_out = np.nan
+            break
+    return num_out
+
+def output_layer_activation(output_value, num_classes):
+    d = np.ones(num_classes, dtype=np.float64) * -1.
+    # num = dataset_shufle.iloc[ni, 0]
+    d[output_value] = 1.
+    return d
+
+def load_neural_network(neural_network_xlsx):
+    df = pd.read_excel(open(neural_network_xlsx, 'rb'),
+                       sheet_name='weights')
+    df2 = pd.read_excel(open(neural_network_xlsx, 'rb'),
+                        sheet_name='params')
+
+    L = int(df2['L'][0])
+    m = list(df2['m'][0:L + 1])
+    a = list(df2['a'][0:L])
+    b = list(df2['b'][0:L])
+
+    clf = MLPClassifier(
+        hidden_layer_sizes=(tuple(m[1:-1])),
+        activation= activation_function_name.TANH,
+        learning_rate='invscaling',  # 'constant'
+        solver= solver.BACKPROPAGATION,
+        learning_rate_init=0.5,  # 0.001 para constant
+        max_iter=10,
+        shuffle=True,
+        random_state=1,
+        momentum=0.9,  # 0.01 para constant
+        n_individuals=10,
+        weight_limit=1,
+        batch_size='auto',
+        tol=0.01
+    )
+
+    clf.initialize_layers(m[0], m[-1])
+    cont_neuron = 0
+
+    # Carrega os pesos
+
+    # faz o array para representar as colunas no excel, igual
+    # ao que é feito ao salvar a rede
+
+    arrays = np.zeros((2, np.sum(m[1:])))
+
+    end_array = 0
+    start_array = 0
+    for l in range(0, L):
+
+        if l == 0:
+            start_array = 0
+            end_array = start_array + m[l + 1]
+        else:
+            start_array += m[l]
+            end_array += m[l + 1]
+
+        arrays[0][start_array:end_array] = int(l + 1)
+        arrays[1][start_array:end_array] = np.arange(0, m[l + 1])
+
+    tuples = list(zip(*arrays))
+
+    columns = pd.MultiIndex.from_tuples(tuples, names=['Layer:', 'Neuron:'])
+
+    data = df.to_numpy()
+    data = np.delete(data, 0, 1)
+    data = data[2:]
+    # print(f'{data[0]}')
+    # print(f'{data[-1]}')
+    # print(f'np.shape(data)={np.shape(data)}')
+    df = pd.DataFrame(data=data, columns=columns)
+
+    for l in range(0, L):
+        # df[l + 1][0:self.m[l] + 1] = np.transpose(self.l[l].w)
+        for j in range(0, m[l + 1]):
+            # print(np.transpose(df.loc[l + 1][0:m[l] + 1]))
+            # print(f'np.shape(np.transpose(df[l + 1][0:m[l] + 1]))={np.shape(np.transpose(df[l + 1][0:m[l] + 3]))}, np.shape(a1.l[l].w) = {np.shape(a1.l[l].w)}\n')
+            clf.l[l].w = np.transpose(df[l + 1][0:m[l] + 1].to_numpy())
+
+    clf.weights_initialized = True
+    return clf

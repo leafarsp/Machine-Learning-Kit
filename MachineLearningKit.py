@@ -4,6 +4,7 @@ import numpy as np
 import pandas as pd
 from enum import Enum
 import matplotlib.pyplot as plt
+from sklearn.neural_network import MLPClassifier as skl
 
 class activation_function_name(Enum):
     TANH=1
@@ -502,7 +503,7 @@ def load_neural_network(neural_network_xlsx):
         hidden_layer_sizes=(tuple(m[1:-1])),
         activation= activation_function_name.TANH,
         learning_rate='invscaling',  # 'constant'
-        solver= solver.BACKPROPAGATION,
+        solver=solver.BACKPROPAGATION,
         learning_rate_init=0.5,  # 0.001 para constant
         max_iter=10,
         shuffle=True,
@@ -559,3 +560,31 @@ def load_neural_network(neural_network_xlsx):
 
     clf.weights_initialized = True
     return clf
+
+def load_scikit_model(model:skl):
+
+    L = len(model.coefs_)
+    m = [0] * (L+1)
+    a = [1.] * L
+    b = [1.] * L
+
+    for i in range(1,L+1):
+        m[i] = len(np.transpose(model.coefs_[i-1]))
+    m[0] = len(np.transpose(model.coefs_[0])[0])
+    print(f'L:{L}, m:{m}')
+    local_model = rede_neural(L,m,a,b)
+
+    for l in range(0, L):
+        # df[l + 1][0:self.m[l] + 1] = np.transpose(self.l[l].w)
+        for j in range(0, m[l + 1]):
+            # print(np.transpose(df.loc[l + 1][0:m[l] + 1]))
+            # print(f'np.shape(np.transpose(df[l + 1][0:m[l] + 1]))={np.shape(np.transpose(df[l + 1][0:m[l] + 3]))}, np.shape(a1.l[l].w) = {np.shape(a1.l[l].w)}\n')
+            # print(f'\n{local_model.l[l].w[j][0:-1]}')
+            # print(f'{np.transpose(model.coefs_[l])[j]}')
+            local_model.l[l].w[j][0:-1] = np.transpose(model.coefs_[l])[j]
+            local_model.l[l].w[j][-1] = model.intercepts_[l][j]
+            # local_model.l[l].w[0:-1] = np.transpose(model.coefs_[l])[j]
+            # local_model.l[l].w[-1] = model.intercepts_[l][j]
+
+    local_model.weights_initialized = True
+    return local_model

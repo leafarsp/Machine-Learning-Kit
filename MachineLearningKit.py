@@ -48,7 +48,8 @@ class MLPClassifier:
                  batch_size='auto',
                  tol=0.0001,
                  power_t=0.5,
-                 n_iter_no_change = 10
+                 n_iter_no_change = 10,
+                 activation_lower_value = -1.
                  ):
 
         self.activation=activation
@@ -88,6 +89,7 @@ class MLPClassifier:
         self.coefs_= None
         self.intercepts_= None
         self.layers_initialized = False
+        self.activation_lower_value = activation_lower_value
 
     def initialize_layers(self, n_input_nodes, n_classes):
 
@@ -258,8 +260,10 @@ class MLPClassifier:
     #     d[output_value] = 1.
     #     return d
 
-    def output_layer_activation(self, output_value, num_classes):
-        d = np.ones(num_classes, dtype=np.float64) * -1.
+    def output_layer_activation(self, output_value,
+                                num_classes):
+        d = np.ones(num_classes, dtype=np.float64) * \
+            self.activation_lower_value
         # num = dataset_shufle.iloc[ni, 0]
         d[output_value] = 1.
         return d
@@ -482,8 +486,10 @@ def get_output_class(y, threshold=0.8):
             break
     return num_out
 
-def output_layer_activation(output_value, num_classes):
-    d = np.ones(num_classes, dtype=np.float64) * -1.
+def output_layer_activation(output_value,
+                            num_classes,
+                            activation_lower_value=-1.):
+    d = np.ones(num_classes, dtype=np.float64) * activation_lower_value
     # num = dataset_shufle.iloc[ni, 0]
     d[output_value] = 1.
     return d
@@ -586,7 +592,8 @@ def load_scikit_model(model:skl):
         n_individuals=10,
         weight_limit=1,
         batch_size='auto',
-        tol=0.01
+        tol=0.01,
+        activation_lower_value=0.
     )
 
     local_model.initialize_layers(m[0],m[-1])

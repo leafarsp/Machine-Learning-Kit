@@ -34,7 +34,7 @@ class layer():
 class MLPClassifier:
 
     def __init__(self,
-                 hidden_layer_sizes=((10)),
+                 hidden_layer_sizes=((10,)),
                  activation: activation_function_name = activation_function_name.TANH,
                  learning_rate='constant',
                  solver=solver.BACKPROPAGATION,
@@ -465,7 +465,7 @@ def teste_acertividade(X: list, y: list, rede: MLPClassifier,
         df.loc[len(df)] = list_row
         if save_result==True:
             df.to_excel(filename,sheet_name='Results')
-
+    return result
 
 
 def get_output_class(y, threshold=0.8):
@@ -565,26 +565,40 @@ def load_scikit_model(model:skl):
 
     L = len(model.coefs_)
     m = [0] * (L+1)
-    a = [1.] * L
-    b = [1.] * L
+
 
     for i in range(1,L+1):
         m[i] = len(np.transpose(model.coefs_[i-1]))
     m[0] = len(np.transpose(model.coefs_[0])[0])
-    print(f'L:{L}, m:{m}')
-    local_model = rede_neural(L,m,a,b)
+    # print(f'L:{L}, m:{m}')
+
+
+    local_model = MLPClassifier(
+        hidden_layer_sizes=tuple(m[1:-1]),
+        activation=activation_function_name.TANH,
+        learning_rate='invscaling',  # 'constant'
+        solver=solver.BACKPROPAGATION,
+        learning_rate_init=0.5,  # 0.001 para constant
+        max_iter=10,
+        shuffle=True,
+        random_state=1,
+        momentum=0.9,  # 0.01 para constant
+        n_individuals=10,
+        weight_limit=1,
+        batch_size='auto',
+        tol=0.01
+    )
+
+    local_model.initialize_layers(m[0],m[-1])
+    # print(f'local_model.hidden_layer_sizes={local_model.hidden_layer_sizes}')
 
     for l in range(0, L):
-        # df[l + 1][0:self.m[l] + 1] = np.transpose(self.l[l].w)
+
         for j in range(0, m[l + 1]):
-            # print(np.transpose(df.loc[l + 1][0:m[l] + 1]))
-            # print(f'np.shape(np.transpose(df[l + 1][0:m[l] + 1]))={np.shape(np.transpose(df[l + 1][0:m[l] + 3]))}, np.shape(a1.l[l].w) = {np.shape(a1.l[l].w)}\n')
-            # print(f'\n{local_model.l[l].w[j][0:-1]}')
-            # print(f'{np.transpose(model.coefs_[l])[j]}')
-            local_model.l[l].w[j][0:-1] = np.transpose(model.coefs_[l])[j]
-            local_model.l[l].w[j][-1] = model.intercepts_[l][j]
-            # local_model.l[l].w[0:-1] = np.transpose(model.coefs_[l])[j]
-            # local_model.l[l].w[-1] = model.intercepts_[l][j]
+            weights = np.transpose(model.coefs_[l])[j]
+            bias = model.intercepts_[l][j]
+            local_model.l[l].w[j][0:-1] = weights
+            local_model.l[l].w[j][-1] = bias
 
     local_model.weights_initialized = True
     return local_model

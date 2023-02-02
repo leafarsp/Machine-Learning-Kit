@@ -5,6 +5,7 @@ import pandas as pd
 from enum import Enum
 import matplotlib.pyplot as plt
 from sklearn.neural_network import MLPClassifier as skl
+import pickle
 
 class activation_function_name(Enum):
     TANH=1
@@ -262,10 +263,9 @@ class MLPClassifier:
 
     def output_layer_activation(self, output_value,
                                 num_classes):
-        d = np.ones(num_classes, dtype=np.float64) * \
-            self.activation_lower_value
-        # num = dataset_shufle.iloc[ni, 0]
-        d[output_value] = 1.
+
+        d=output_layer_activation(output_value,num_classes,
+                                self.activation_lower_value)
         return d
 
     def backward_propagation(self, x, d, alpha, eta):
@@ -307,6 +307,16 @@ class MLPClassifier:
 
     def predict(self, X):
         return self.forward_propagation(X[0])
+
+    def save_nn_obj(obj, filename):
+        with open(filename, 'wb') as outp:
+            # Step 3
+            pickle.dump(obj, outp, pickle.HIGHEST_PROTOCOL)
+
+def load_nn_obj(filename):
+    with open(filename, 'rb') as inp:
+        clf = pickle.load(inp)
+    return clf
 
 def shufle_dataset(X,y):
     n_inst = np.shape(y)[0]
@@ -437,6 +447,7 @@ def teste_acertividade(X: list, y: list, rede: MLPClassifier,
 
     columns += list(np.arange(rede.m[-1]))
     df = pd.DataFrame(columns = columns)
+    result=0
     if rede.get_flag_teste_acertividade() == False:
         for i in range(0, n_inst):
 
@@ -489,8 +500,9 @@ def get_output_class(y, threshold=0.8):
 def output_layer_activation(output_value,
                             num_classes,
                             activation_lower_value=-1.):
-    d = np.ones(num_classes, dtype=np.float64) * activation_lower_value
-    # num = dataset_shufle.iloc[ni, 0]
+    d = np.ones(num_classes, dtype=np.float64) * \
+        activation_lower_value
+
     d[output_value] = 1.
     return d
 

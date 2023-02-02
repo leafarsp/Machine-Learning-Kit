@@ -86,7 +86,7 @@ class MLPClassifier:
         self.acertividade = 0
         self.generation = 0
         self.class_distinction_rate = 0.
-        self.flag_test_acertividade = False
+        self.flag_teste_acertividade = False
         self.coefs_= None
         self.intercepts_= None
         self.layers_initialized = False
@@ -211,13 +211,13 @@ class MLPClassifier:
 
     def set_acertividade(self, acertividade):
         self.acertividade = acertividade
-        self.flag_test_acertividade = True
+        self.flag_teste_acertividade = True
 
     def get_acertividade(self):
         return self.acertividade
 
     def get_flag_teste_acertividade(self):
-        return self.flag_test_acertividade
+        return self.flag_teste_acertividade
 
     def get_generation(self):
         return self.generation
@@ -316,6 +316,7 @@ class MLPClassifier:
 def load_nn_obj(filename):
     with open(filename, 'rb') as inp:
         clf = pickle.load(inp)
+
     return clf
 
 def shufle_dataset(X,y):
@@ -346,7 +347,7 @@ def train_neural_network(rede: MLPClassifier, X: list, y: list):
 
         alpha = np.ones((rede.L, N))
         for l in range(0, rede.L):
-            alpha[l] = list(np.linspace(rede.momentum, 0., N))
+            alpha[l] = list(np.linspace(rede.momentum, rede.momentum, N))
 
     elif rede.learning_rate == 'invscaling':
         t = np.linspace(rede.learning_rate_init,N,N)
@@ -448,6 +449,7 @@ def teste_acertividade(X: list, y: list, rede: MLPClassifier,
     columns += list(np.arange(rede.m[-1]))
     df = pd.DataFrame(columns = columns)
     result=0
+
     if rede.get_flag_teste_acertividade() == False:
         for i in range(0, n_inst):
 

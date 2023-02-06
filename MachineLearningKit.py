@@ -91,6 +91,10 @@ class MLPClassifier:
         self.intercepts_= None
         self.layers_initialized = False
         self.activation_lower_value = activation_lower_value
+        self.t = 0
+        self.max_epoch_sprint = max_iter
+        self.Eav = None
+        self.E_inst = None
 
     def initialize_layers(self, n_input_nodes, n_classes):
 
@@ -312,12 +316,12 @@ class MLPClassifier:
         with open(filename, 'wb') as outp:
             # Step 3
             pickle.dump(obj, outp, pickle.HIGHEST_PROTOCOL)
-
+def cast_to_MLP_classifier(clf:MLPClassifier):
+    return clf
 def load_nn_obj(filename):
     with open(filename, 'rb') as inp:
         clf = pickle.load(inp)
-
-    return clf
+    return cast_to_MLP_classifier(clf)
 
 def shufle_dataset(X,y):
     n_inst = np.shape(y)[0]
@@ -329,17 +333,7 @@ def shufle_dataset(X,y):
     X=dataset[:,out_nodes:]
     return X,y
 
-
-def train_neural_network(rede: MLPClassifier, X: list, y: list):
-
-    rnd_seed = rede.random_state
-
-    n_inst = np.shape(X)[0]
-    cnt_iter=0
-    n_epoch = rede.max_iter
-
-    N = n_inst * n_epoch
-
+def set_momentum_and_learning_rate(N:int, rede:MLPClassifier):
     eta = np.ones((rede.L, N))
     if rede.learning_rate == 'constant':
         for l in range(0, rede.L):
@@ -350,7 +344,7 @@ def train_neural_network(rede: MLPClassifier, X: list, y: list):
             alpha[l] = list(np.linspace(rede.momentum, rede.momentum, N))
 
     elif rede.learning_rate == 'invscaling':
-        t = np.linspace(rede.learning_rate_init,N,N)
+        t = np.linspace(rede.learning_rate_init, N, N)
         for l in range(0, rede.L):
             eta[l] = rede.learning_rate_init / pow(t, rede.power_t)
 
@@ -366,19 +360,33 @@ def train_neural_network(rede: MLPClassifier, X: list, y: list):
         for l in range(0, rede.L):
             alpha[l] = list(np.linspace(rede.momentum, 0., N))
 
-
-
     eta = np.transpose(eta)
     alpha = np.transpose(alpha)
+    return eta, alpha
+
+def train_neural_network(rede: MLPClassifier, X: list, y: list):
+
+    rnd_seed = rede.random_state
+
+    n_inst = np.shape(X)[0]
+    cnt_iter=0
+    n_epoch = rede.max_iter
+
+    N = n_inst * n_epoch
+
+
+    eta, alpha = set_momentum_and_learning_rate(N, rede)
 
     # Inicializa os pesos com valores aleatórios e o bias como zero
     if not rede.weights_initialized:
         rede.initialize_weights_random(random_seed=rede.random_state, weight_limit=rede.weight_limit)
 
-    Eav = np.zeros(n_epoch)
-    E_inst = np.zeros(N)
+    if rede.Eav is None:
+        rede.Eav = np.zeros(n_epoch)
+        rede.E_inst = np.zeros(N)
     # início do treinamento
-    for ne in range(0, n_epoch):
+    ne_start = rede.t
+    for ne in range(ne_start, rede.max_epoch_sprint):
         X_l, y_l = shufle_dataset(X, y)
 
         rnd_seed += 1
@@ -392,18 +400,18 @@ def train_neural_network(rede: MLPClassifier, X: list, y: list):
             rede.backward_propagation(x=X_l[ni], d=y_l[ni],
                                       alpha=alpha[n], eta=eta[n])
             e_epoch += rede.get_sum_eL()
-            E_inst[cnt_iter] = rede.get_sum_eL()
+            rede.E_inst[cnt_iter] = rede.get_sum_eL()
             cnt_iter += 1
 
-        Eav[ne] = 1 / (n_inst) * e_epoch
+        rede.Eav[ne] = 1 / (n_inst) * e_epoch
         # Faz a avaliação dos últims treinamento depois de x instâncias
 
         #
         #
-        print(f'Epoch: {ne}/{n_epoch}, loss: {Eav[ne]}')
+        print(f'Epoch: {ne}/{n_epoch}, loss: {rede.Eav[ne]}')
         stop_training = eval_stop_training(cnt_iter=ne,
                                            n_iter_no_change=rede.n_iter_no_change,
-                                           err=Eav, tol=rede.tol)
+                                           err=rede.Eav, tol=rede.tol)
         if stop_training:
             print(f'Training loss did not improve more than '
                   f'tol={rede.tol:.8f} for {rede.n_iter_no_change} '
@@ -411,8 +419,8 @@ def train_neural_network(rede: MLPClassifier, X: list, y: list):
             break
         # if Eav[ne] < rede.tol:
         #     break
-
-    return Eav, ne
+        rede.t +=1
+    return rede.Eav, ne
 
 def eval_stop_training(cnt_iter, n_iter_no_change, err, tol):
     result = False

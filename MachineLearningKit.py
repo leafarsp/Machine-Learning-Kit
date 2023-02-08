@@ -67,7 +67,7 @@ class MLPClassifier:
         self.solver=solver
         self.power_t=power_t
         self.n_iter_no_change=n_iter_no_change
-
+        #[StrOptions({"constant", "invscaling", "adaptive"})]{'lbfgs', 'sgd', 'adam'}, default='adam'
         if type(hidden_layer_sizes) == int:
             self.hidden_layer_sizes = (hidden_layer_sizes,)
             self.L = 2

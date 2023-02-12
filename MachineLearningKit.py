@@ -92,6 +92,7 @@ class MLPClassifier:
         self.layers_initialized = False
         self.activation_lower_value = activation_lower_value
         self.t = 0
+        self.cnt_iter = 0
         self.max_epoch_sprint = max_iter
         self.Eav = None
         self.E_inst = None
@@ -272,18 +273,27 @@ class MLPClassifier:
                                 self.activation_lower_value)
         return d
 
-    def backward_propagation(self, x, d, alpha, eta):
+    def backward_propagation(self, x, d, alpha, eta, batch_size=1):
+        if batch_size==0:
+            self._backward_propagation(self, x, d, alpha, eta)
+        else:
+            self._backward_propagation_batch(self, x, d, alpha, eta, batch_size)
+
+    def _backward_propagation(self, x, d, alpha, eta):
         if len(d) != self.m[-1]:
             raise ValueError(
                 f'Error, input vector has different size from expected. Input size= {len(x)}, Input nodes = {self.m[-1]}')
         # self.forward_propagation(x)
+        # self.cnt_iter += 1
         output_d = np.append(d, 1)
         for l in range(self.L - 1, -1, -1):
             for j in range(0, self.m[l + 1]):
                 # print(f'l={l}, j= {j}')
                 if l == (self.L - 1):
+                    # equation 4.45 from Neural Networks - Simon Haykin
                     self.l[l].e[j] = output_d[j] - self.l[l].y[j]
                 else:
+                    # Part of equation 4.46, without activation function part
                     self.l[l].e[j] = np.sum(self.l[l + 1].delta * self.get_weights_connected_ahead(j, l))
 
                 self.l[l].delta[j] = self.l[l].e[j] * self.d_func_ativacao(self.a[l], self.b[l], self.l[l].v[j])
@@ -292,6 +302,7 @@ class MLPClassifier:
                 else:
                     input = np.append(self.l[l - 1].y, 1)
 
+                # equation 4.39 from Neural Networks - Simon Haykin
                 w_correction = alpha[l] * self.l[l].w_correction_ant[j] + eta[l] * self.l[l].delta[j] * input
 
                 self.l[l].w_correction_ant[j] = w_correction
@@ -299,6 +310,45 @@ class MLPClassifier:
                 # self.l[l].w_ant[j] = np.copy(self.l[l].w[j])
                 self.l[l].w[j] += w_correction
 
+        #TODO: ajustar essa função de acordo com o livro do Haykin
+    def _backward_propagation_batch(self, x, d, alpha, eta, batch_size):
+        if len(d) != self.m[-1]:
+            raise ValueError(
+                f'Error, input vector has different size from expected. Input size= {len(x)}, Input nodes = {self.m[-1]}')
+        # self.forward_propagation(x)
+        # self.cnt_iter += 1
+        output_d = np.append(d, 1)
+        for l in range(self.L - 1, -1, -1):
+            for j in range(0, self.m[l + 1]):
+                # print(f'l={l}, j= {j}')
+                if l == (self.L - 1):
+                    # equation 4.45 from Neural Networks - Simon Haykin
+                    err = output_d[j] - self.l[l].y[j]
+
+                else:
+                    # Part of equation 4.46, without activation function part
+                    err = np.sum(self.l[l + 1].delta * self.get_weights_connected_ahead(j, l))
+
+
+                self.l[l].delta[j] = self.l[l].e[j] * self.d_func_ativacao(self.a[l], self.b[l], self.l[l].v[j])
+
+                if l == (0):
+                    input = np.append(x, 1)
+                else:
+                    input = np.append(self.l[l - 1].y, 1)
+
+                # Equation 4.41
+                self.l[l].w_correction_ant[j] += eta[l] * (alpha[l] * self.l[l].delta[j] * input)/batch_size
+
+
+
+                # equation 4.43 from Neural Networks - Simon Haykin
+                if (self.cnt_iter % batch_size) == 0:
+
+                    # w_temp = self.l[l].w[j] + alpha[l] * self.l[l].w_ant[j] + eta[l] * self.l[l].delta[j] * input
+                    # self.l[l].w_ant[j] = np.copy(self.l[l].w[j])
+                    self.l[l].w[j] += self.l[l].w_correction_ant[j]
+                    self.l[l].w_correction_ant[j] = 0
     def fit(self, X, y):
         Eav= None
         if not self.weights_initialized:

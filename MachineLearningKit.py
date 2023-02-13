@@ -56,6 +56,7 @@ class MLPClassifier:
         self.activation=activation
         self.learning_rate = learning_rate
         self.learning_rate_init = learning_rate_init
+        self._learning_rate = learning_rate_init
         self.max_iter = max_iter
         self.shuffle = shuffle
         self.random_state = random_state
@@ -96,6 +97,9 @@ class MLPClassifier:
         self.max_epoch_sprint = max_iter
         self.Eav = None
         self.E_inst = None
+        self.learning_rate_div=5
+        self.cnt_error_free = 0
+        self.learning_rate_changed = False
 
     def initialize_layers(self, n_input_nodes, n_classes):
 
@@ -274,10 +278,10 @@ class MLPClassifier:
         return d
 
     def backward_propagation(self, x, d, alpha, eta, batch_size=1):
-        if batch_size==0:
-            self._backward_propagation(self, x, d, alpha, eta)
+        if batch_size==1:
+            self._backward_propagation(x, d, alpha, eta)
         else:
-            self._backward_propagation_batch(self, x, d, alpha, eta, batch_size)
+            self._backward_propagation_batch(x, d, alpha, eta, batch_size)
 
     def _backward_propagation(self, x, d, alpha, eta):
         if len(d) != self.m[-1]:
@@ -383,6 +387,32 @@ def shufle_dataset(X,y):
     X=dataset[:,out_nodes:]
     return X,y
 
+def get_momentum_andLearning_rate(t:int, N:int, rede:MLPClassifier):
+    eta = np.ones(rede.L)
+    alpha = np.ones(rede.L)
+    if rede.learning_rate == 'constant':
+        for l in range(0, rede.L):
+            eta[l] = rede._learning_rate
+            alpha[l] = rede.momentum
+    elif rede.learning_rate == 'invscaling':
+        for l in range(0, rede.L):
+            if t == 0:
+                eta[l] = rede._learning_rate
+            else:
+                eta[l] = rede.learning_rate_init / pow(t, rede.power_t)
+            alpha[l] = rede.momentum
+    elif rede.learning_rate == 'adaptive':
+        for l in range(0, rede.L):
+            eta[l] = rede._learning_rate
+            alpha[l] = rede.momentum
+    else:
+        for l in range(0, rede.L):
+            eta[l] = rede._learning_rate - rede.learning_rate_init/N * t
+            alpha[l] = rede.momentum - rede.momentum/N * t
+
+
+    return eta, alpha
+
 def set_momentum_and_learning_rate(N:int, rede:MLPClassifier):
     eta = np.ones((rede.L, N))
     if rede.learning_rate == 'constant':
@@ -402,6 +432,11 @@ def set_momentum_and_learning_rate(N:int, rede:MLPClassifier):
         alpha = np.ones((rede.L, N))
         for l in range(0, rede.L):
             alpha[l] = rede.momentum / pow(t, rede.power_t)
+    elif rede.learning_rate == 'adaptive':
+        eta = np.ones(rede.L)
+        alpha = np.ones((rede.L, N))
+        for l in range(0, rede.L):
+            alpha = alpha[l] = list(np.linspace(rede.momentum, rede.momentum, N))
     else:
         for l in range(0, rede.L):
             eta[l] = list(np.linspace(rede.learning_rate_init, 0, N))
@@ -424,18 +459,20 @@ def train_neural_network(rede: MLPClassifier, X: list, y: list):
 
     N = n_inst * n_epoch
 
-
-    eta, alpha = set_momentum_and_learning_rate(N, rede)
+    eta, alpha = get_momentum_andLearning_rate(0, N, rede)
+    # eta, alpha = set_momentum_and_learning_rate(N, rede)
 
     # Inicializa os pesos com valores aleatórios e o bias como zero
     if not rede.weights_initialized:
+        print(f'Initializing weights randomly')
         rede.initialize_weights_random(random_seed=rede.random_state, weight_limit=rede.weight_limit)
 
     if rede.Eav is None:
         rede.Eav = np.zeros(n_epoch)
-        rede.E_inst = np.zeros(N)
+        # rede.E_inst = np.zeros(N)
     # início do treinamento
     ne_start = rede.t
+    learning_rate_changed = False
     for ne in range(ne_start, rede.max_epoch_sprint):
         X_l, y_l = shufle_dataset(X, y)
 
@@ -446,11 +483,15 @@ def train_neural_network(rede: MLPClassifier, X: list, y: list):
             n = ni + ne * (n_inst)
             if n >= (N - 1):
                 break
+            eta, alpha = get_momentum_andLearning_rate(n,N,rede)
+
+
+
             rede.forward_propagation(x=X_l[ni])
             rede.backward_propagation(x=X_l[ni], d=y_l[ni],
-                                      alpha=alpha[n], eta=eta[n])
+                                      alpha=alpha, eta=eta)
             e_epoch += rede.get_sum_eL()
-            rede.E_inst[cnt_iter] = rede.get_sum_eL()
+            # rede.E_inst[cnt_iter] = rede.get_sum_eL()
             cnt_iter += 1
 
         rede.Eav[ne] = 1 / (n_inst) * e_epoch
@@ -459,35 +500,54 @@ def train_neural_network(rede: MLPClassifier, X: list, y: list):
         #
         #
         print(f'Epoch: {ne}/{n_epoch}, loss: {rede.Eav[ne]}')
-        stop_training = eval_stop_training(cnt_iter=ne,
-                                           n_iter_no_change=rede.n_iter_no_change,
-                                           err=rede.Eav, tol=rede.tol)
+        stop_training = eval_stop_training(rede, cnt_iter=ne)
         if stop_training:
-            print(f'Training loss did not improve more than '
-                  f'tol={rede.tol:.8f} for {rede.n_iter_no_change} '
-                  f'consecutive epochs. Stopping.')
-            break
+
+            if rede.learning_rate == 'adaptive':
+                if rede._learning_rate < 0.001:
+
+                    print(f'Training loss did not improve more than '
+                          f'tol={0.001:.8f} for {rede.n_iter_no_change} '
+                          f'consecutive epochs. Learning rate too small, stopping.')
+                    break
+                else:
+                    rede._learning_rate = rede._learning_rate * (1./rede.learning_rate_div)
+                    rede.learning_rate_changed = True
+                    # alpha = alpha * (1./5.)
+                    print(f'Training loss did not improve more than '
+                          f'tol={rede.tol:.8f} for {rede.n_iter_no_change} '
+                          f'consecutive epochs. Setting learning rate to {rede._learning_rate}.')
+            else:
+                print(f'Training loss did not improve more than '
+                      f'tol={rede.tol:.8f} for {rede.n_iter_no_change} '
+                      f'consecutive epochs. Stopping.')
         # if Eav[ne] < rede.tol:
         #     break
         rede.t +=1
     return rede.Eav, ne
 
-def eval_stop_training(cnt_iter, n_iter_no_change, err, tol):
+def eval_stop_training(rede, cnt_iter):
     result = False
     cnt_err_no_change = 0
     err_chg = 0
+    if rede.learning_rate_changed:
+        rede.cnt_error_free += 1
+    if rede.cnt_error_free > (rede.n_iter_no_change*2):
+        rede.cnt_error_free = 0
+        rede.learning_rate_changed = False
 
-    if cnt_iter > n_iter_no_change:
+
+    if (cnt_iter > rede.n_iter_no_change) and (rede.cnt_error_free == 0):
         # avalia as últimas instancias
-        for i in range(cnt_iter - n_iter_no_change,
+        for i in range(cnt_iter - rede.n_iter_no_change,
                        cnt_iter):
-            err_chg = abs(err[i]-err[i-1])
-            if err_chg < tol:
+            err_chg = abs(rede.Eav[i]-rede.Eav[i-1])
+            if err_chg < rede.tol:
                 cnt_err_no_change += 1
             else:
                 cnt_err_no_change = 0
 
-            if cnt_err_no_change >= n_iter_no_change:
+            if cnt_err_no_change >= rede.n_iter_no_change:
                 result = True
 
     # if result:

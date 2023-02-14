@@ -62,6 +62,7 @@ class MLPClassifier:
         self.random_state = random_state
         self.n_individuals = n_individuals
         self.momentum = momentum
+        # self._momentum = momentum
         self.tol=tol
         self.weight_limit=weight_limit
         self.batch_size=batch_size
@@ -484,6 +485,8 @@ def train_neural_network(rede: MLPClassifier, X: list, y: list):
             if n >= (N - 1):
                 break
             eta, alpha = get_momentum_andLearning_rate(n,N,rede)
+            rede._learning_rate = eta[0]
+            # rede._momentum = alpha[0]
 
 
 

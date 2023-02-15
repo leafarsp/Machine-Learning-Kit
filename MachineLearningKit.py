@@ -502,7 +502,7 @@ def train_neural_network(rede: MLPClassifier, X: list, y: list):
 
         #
         #
-        print(f'Epoch: {ne}/{n_epoch}, loss: {rede.Eav[ne]}')
+        print(f'Epoch: {ne}/{n_epoch}, loss: {rede.Eav[ne]:.10f}')
         stop_training = eval_stop_training(rede, cnt_iter=ne)
         if stop_training:
 
@@ -524,6 +524,7 @@ def train_neural_network(rede: MLPClassifier, X: list, y: list):
                 print(f'Training loss did not improve more than '
                       f'tol={rede.tol:.8f} for {rede.n_iter_no_change} '
                       f'consecutive epochs. Stopping.')
+                break
         # if Eav[ne] < rede.tol:
         #     break
         rede.t +=1

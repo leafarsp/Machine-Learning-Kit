@@ -31,6 +31,7 @@ class layer():
         self.v_av = np.ones(m)
         self.delta = np.ones(m)
         self.e = np.ones(m)
+        self.eav = np.zeros(m)
 
 
 class MLPClassifier:
@@ -70,6 +71,7 @@ class MLPClassifier:
         self.solver=solver
         self.power_t=power_t
         self.n_iter_no_change=n_iter_no_change
+        self.__batch_cnt = 0
         #[StrOptions({"constant", "invscaling", "adaptive"})]{'lbfgs', 'sgd', 'adam'}, default='adam'
         if type(hidden_layer_sizes) == int:
             self.hidden_layer_sizes = (hidden_layer_sizes,)
@@ -191,13 +193,10 @@ class MLPClassifier:
         # return (a * np.exp(-a * v)) / ((1 + np.exp(-a * v))**2)
         return a * b * (1 - np.tanh(b * v) ** 2)
 
-    def forward_propagation(self, x):
-        if self.batch_size == 1:
-            self._forward_propagation(x)
-        else:
-            self._forward_propagation_batch(x, self.batch_size)
 
-    def _forward_propagation(self, x):
+
+
+    def forward_propagation(self, x):
         if len(x) != self.m[0]:
             raise ValueError(
                 f'Error, input vector has different size from expected. Input size= {len(x)}, Input nodes = {self.m[0]}')
@@ -212,22 +211,7 @@ class MLPClassifier:
             input = np.append(self.l[l].y, 1)
         return self.l[self.L - 1].y
 
-    def _forward_propagation_batch(self, x, batch_size):
-        if len(x) != self.m[0]:
-            raise ValueError(
-                f'Error, input vector has different size from expected. Input size= {len(x)}, Input nodes = {self.m[0]}')
 
-        input = np.append(x, 1)  # acrescenta 1 relativo ao bias
-
-
-        for l in range(0, self.L):
-            for j in range(0, self.m[l + 1]):
-                self.l[l].v[j] = np.matmul(np.transpose(self.l[l].w[j]), input)
-                self.l[l].v_av[j] += self.l[l].v[j] * 1/batch_size
-
-                self.l[l].y[j] += self.activation_func(self.a[l], self.b[l], self.l[l].v[j])
-            input = np.append(self.l[l].y, 1)
-        return self.l[self.L - 1].y
 
     def get_sum_eL(self):
         return np.sum(self.l[-1].e ** 2)
@@ -301,45 +285,8 @@ class MLPClassifier:
                                 self.activation_lower_value)
         return d
 
+
     def backward_propagation(self, x, d, alpha, eta):
-        if self.batch_size==1:
-            self._backward_propagation(x, d, alpha, eta)
-        else:
-            self._backward_propagation_batch(x, d, alpha, eta, self.batch_size)
-
-    def _backward_propagation(self, x, d, alpha, eta):
-        if len(d) != self.m[-1]:
-            raise ValueError(
-                f'Error, input vector has different size from expected. Input size= {len(x)}, Input nodes = {self.m[-1]}')
-        # self.forward_propagation(x)
-        # self.cnt_iter += 1
-        output_d = np.append(d, 1)
-        for l in range(self.L - 1, -1, -1):
-            for j in range(0, self.m[l + 1]):
-                # print(f'l={l}, j= {j}')
-                if l == (self.L - 1):
-                    # equation 4.45 from Neural Networks - Simon Haykin
-                    self.l[l].e[j] = (output_d[j] - self.l[l].y[j])
-                else:
-                    # Part of equation 4.46, without activation function part
-                    self.l[l].e[j] = np.sum(self.l[l + 1].delta * self.get_weights_connected_ahead(j, l))
-
-                self.l[l].delta[j] = self.l[l].e[j] * self.d_func_ativacao(self.a[l], self.b[l], self.l[l].v[j])
-                if l == (0):
-                    input = np.append(x, 1)
-                else:
-                    input = np.append(self.l[l - 1].y, 1)
-
-                # equation 4.39 from Neural Networks - Simon Haykin
-                w_correction = alpha[l] * self.l[l].w_correction_ant[j] + eta[l] * self.l[l].delta[j] * input
-
-                self.l[l].w_correction_ant[j] = w_correction
-                # w_temp = self.l[l].w[j] + alpha[l] * self.l[l].w_ant[j] + eta[l] * self.l[l].delta[j] * input
-                # self.l[l].w_ant[j] = np.copy(self.l[l].w[j])
-                self.l[l].w[j] += w_correction
-
-        #TODO: ajustar essa função de acordo com o livro do Haykin
-    def _backward_propagation_batch(self, x, d, alpha, eta, batch_size):
         if len(d) != self.m[-1]:
             raise ValueError(
                 f'Error, input vector has different size from expected. Input size= {len(x)}, Input nodes = {self.m[-1]}')
@@ -347,39 +294,43 @@ class MLPClassifier:
         # self.cnt_iter += 1
         output_d = np.append(d, 1)
 
-        if (self.cnt_iter % batch_size) != 0:
-            self.cnt_iter+=1
-            for j in range(0, self.m[self.L-1]):
-                self.err += 1 / batch_size * (output_d[j] - self.l[self.L-1].y[j])
-        else:
-            self.cnt_iter = 0
+        self.__batch_cnt+=1
+
+        for j in range(0, self.m[self.L]):
+            self.l[self.L-1].eav[j] += (1/self.batch_size)*(output_d[j] - self.l[self.L-1].y[j])
+
+
+
+        if self.__batch_cnt >= self.batch_size:
+
+            # print(f'batch_cnt: {self.__batch_cnt} error 1st weight: {self.l[self.L - 1].eav[0]} d: {output_d[0]}, y: {self.l[self.L-1].y[0]}')
             for l in range(self.L - 1, -1, -1):
                 for j in range(0, self.m[l + 1]):
                     # print(f'l={l}, j= {j}')
-                    if l != (self.L - 1):
+                    if l == (self.L - 1):
+                        # equation 4.45 from Neural Networks - Simon Haykin
+                        self.l[l].e[j] = self.l[l].eav[j] #(output_d[j] - self.l[l].y[j])
+                    else:
                         # Part of equation 4.46, without activation function part
-                        err = np.sum(self.l[l + 1].delta * self.get_weights_connected_ahead(j, l))
+                        self.l[l].e[j] = np.sum(self.l[l + 1].delta * self.get_weights_connected_ahead(j, l))
 
-
-                    self.l[l].delta[j] = self.l[l].e[j] * self.d_func_ativacao(self.a[l], self.b[l], self.l[l].v_av[j])
-
+                    self.l[l].delta[j] = self.l[l].e[j] * self.d_func_ativacao(self.a[l], self.b[l], self.l[l].v[j])
                     if l == (0):
                         input = np.append(x, 1)
                     else:
                         input = np.append(self.l[l - 1].y, 1)
 
-                    # Equation 4.41
-                    self.l[l].w_correction_ant[j] += eta[l] * (alpha[l] * self.l[l].delta[j] * input)/batch_size
+                    # equation 4.39 from Neural Networks - Simon Haykin
+                    w_correction = alpha[l] * self.l[l].w_correction_ant[j] + eta[l] * self.l[l].delta[j] * input
 
-
-
-                    # equation 4.43 from Neural Networks - Simon Haykin
-
-
+                    self.l[l].w_correction_ant[j] = w_correction
                     # w_temp = self.l[l].w[j] + alpha[l] * self.l[l].w_ant[j] + eta[l] * self.l[l].delta[j] * input
                     # self.l[l].w_ant[j] = np.copy(self.l[l].w[j])
-                    self.l[l].w[j] += self.l[l].w_correction_ant[j]
-                    self.l[l].w_correction_ant[j] = 0
+                    self.l[l].w[j] += w_correction
+            self.__batch_cnt = 0
+            self.l[self.L - 1].eav = np.zeros(self.m[self.L])
+
+
     def fit(self, X, y):
         Eav= None
         if not self.weights_initialized:

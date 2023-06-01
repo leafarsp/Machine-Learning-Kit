@@ -342,7 +342,7 @@ class MLPClassifier:
         return Eav
 
     def predict(self, X):
-        return self.forward_propagation(X[0])
+        return self.forward_propagation(X)
 
     def save_nn_obj(obj, filename):
         with open(filename, 'wb') as outp:

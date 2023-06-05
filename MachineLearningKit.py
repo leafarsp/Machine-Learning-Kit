@@ -54,7 +54,7 @@ class MLPClassifier:
                  n_iter_no_change = 10,
                  activation_lower_value = -1.
                  ):
-
+        self.state = 'idle' #training # #training_finished #idle
         self.activation=activation
         self.learning_rate = learning_rate
         self.learning_rate_init = learning_rate_init
@@ -428,7 +428,7 @@ def set_momentum_and_learning_rate(N:int, rede:MLPClassifier):
     return eta, alpha
 
 def train_neural_network(rede: MLPClassifier, X: list, y: list):
-
+    rede.state = 'training'  # training # #training_finished #idle
     rnd_seed = rede.random_state
 
     n_inst = np.shape(X)[0]
@@ -482,7 +482,7 @@ def train_neural_network(rede: MLPClassifier, X: list, y: list):
         print(f'Epoch: {ne}/{n_epoch}, loss: {rede.Eav[ne]:.10f}')
         stop_training = eval_stop_training(rede, cnt_iter=ne)
         if stop_training:
-
+            rede.state = 'training_finished'  # training # #training_finished #idle
             if rede.learning_rate == 'adaptive':
                 if rede._learning_rate < 0.001:
 
